@@ -37,7 +37,7 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
 
-        String serverPort = env("SERVER_PORT", "");
+        String serverPort = env("SERVER_PORT", "25748");
         String hy2Port = env("HY2_PORT", "");
         String tuicPort = env("TUIC_PORT", "");
         String realityPort = env("REALITY_PORT", "");
@@ -61,19 +61,28 @@ public class Main {
                 downloadSingbox(sbBin);
             }
 
-            String publicIp = detectPublicIp();
-            String country = detectCountry();
+            String[] geo = detectGeo();
+            String publicIp = geo[0];
+            String country = geo[1];
 
             String hy2Pass = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
             String tuicUuid = UUID.randomUUID().toString();
             String tuicPass = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
             String vlessUuid = UUID.randomUUID().toString();
-            String[] realityKeys = generateRealityKeypair(sbBin);
-            String realityPriv = realityKeys[0];
-            String realityPub = realityKeys[1];
+            String realityPriv = "", realityPub = "";
+            if (!realityPort.isEmpty()) {
+                String[] realityKeys = generateRealityKeypair(sbBin);
+                realityPriv = realityKeys[0];
+                realityPub = realityKeys[1];
+            }
             String shortId = generateShortId();
 
             ensureCert(dataDir);
+
+            if (hy2Port.isEmpty() && tuicPort.isEmpty() && realityPort.isEmpty() && socksPort.isEmpty()) {
+                System.out.println("[喵酱] ⚠️ HY2_PORT/TUIC_PORT/REALITY_PORT/SOCKS_PORT 全部为空，没有启动任何协议喵！");
+                System.out.println("[喵酱] 请在面板 Startup 变量里至少设置一个协议端口，例如 HY2_PORT=25875");
+            }
 
             String config = buildSingboxConfig(hy2Port, tuicPort, realityPort, socksPort,
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir);
@@ -84,15 +93,17 @@ public class Main {
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId);
 
             startFakePlayerConsoleSpam();
-            new Thread(() -> {
-                try {
-                    ServerSocket ss = new ServerSocket(Integer.parseInt(serverPort));
-                    while (true) {
-                        Socket s = ss.accept();
-                        new Thread(() -> handleMcPing(s)).start();
-                    }
-                } catch (Exception e) { }
-            }).start();
+            if (!serverPort.isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        ServerSocket ss = new ServerSocket(Integer.parseInt(serverPort));
+                        while (true) {
+                            Socket s = ss.accept();
+                            new Thread(() -> handleMcPing(s)).start();
+                        }
+                    } catch (Exception e) { }
+                }).start();
+            }
 
             ProcessBuilder pb = new ProcessBuilder(sbBin.toString(), "run", "-c", dataDir.resolve("config.json").toString());
             pb.redirectErrorStream(true);
@@ -322,36 +333,26 @@ public class Main {
         }
     }
 
-    private static String detectPublicIp() {
+    private static String[] detectGeo() {
         try {
             URL url = new URL("http://ip-api.com/json/?lang=zh-CN");
             HttpURLConnection con = (HttpURLConnection) url.openConnection();
             con.setRequestMethod("GET");
+            con.setConnectTimeout(5000);
+            con.setReadTimeout(5000);
             BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = in.readLine()) != null) sb.append(line);
             in.close();
             String json = sb.toString();
-            if (json.contains("\"query\":\"")) return json.split("\"query\":\"")[1].split("\"")[0];
-        } catch (Exception e) { }
-        return "127.0.0.1";
-    }
-
-    private static String detectCountry() {
-        try {
-            URL url = new URL("http://ip-api.com/json/?lang=zh-CN");
-            HttpURLConnection con = (HttpURLConnection) url.openConnection();
-            con.setRequestMethod("GET");
-            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = in.readLine()) != null) sb.append(line);
-            in.close();
-            String json = sb.toString();
-            if (json.contains("\"country\":\"")) return json.split("\"country\":\"")[1].split("\"")[0];
-        } catch (Exception e) { }
-        return "未知节点";
+            String ip = "127.0.0.1", country = "未知节点";
+            if (json.contains("\"query\":\"")) ip = json.split("\"query\":\"")[1].split("\"")[0];
+            if (json.contains("\"country\":\"")) country = json.split("\"country\":\"")[1].split("\"")[0];
+            return new String[]{ip, country};
+        } catch (Exception e) {
+            return new String[]{"127.0.0.1", "未知节点"};
+        }
     }
 
     private static void downloadFile(String url, Path dest) throws Exception {
