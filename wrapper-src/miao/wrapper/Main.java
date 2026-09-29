@@ -37,14 +37,15 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
 
-        String serverPort = env("SERVER_PORT", "");
+        String serverPort = env("SERVER_PORT", "25748");
+        String domain = env("DOMAIN", "");
         String hy2Port = env("HY2_PORT", "");
         String tuicPort = env("TUIC_PORT", "");
         String realityPort = env("REALITY_PORT", "");
         String socksPort = env("SOCKS_PORT", "");
-        String cfQuick = env("CF_QUICK", "1");
-        String cfToken = env("CF_TOKEN", "eyJhIjoiYzg1ZGFkNTEzOGM4NGVjOGJlMTE3ZmZhNmFjNTFmODQiLCJ0IjoiYjQxZGQxN2ItOWE4OS00ZDAxLWI4OTUtYWE5YThiZTk3OTJmIiwicyI6IlpEaG1aamczTkRrdFpqUTFOeTAwTnprMExXRTNObVF0Tm1ZMFlqY3laR0poTURFMFpHTmlabUk1WmpVdFkySTBOUzAwT1dFMkxUazFOamt0TkRGbU16WXpPV00wWTJWbCJ9");
-        String cfDomain = env("CF_DOMAIN", "kuu.weimei99.de5.net");
+        String cfQuick = env("CF_QUICK", "0");
+        String cfToken = env("CF_TOKEN", "");
+        String cfDomain = env("CF_DOMAIN", "");
         String cfName = env("CF_NAME", "vmess");
 
         try {
@@ -79,21 +80,23 @@ public class Main {
 
             ensureCert(dataDir);
 
-            if (hy2Port.isEmpty() && tuicPort.isEmpty() && realityPort.isEmpty() && socksPort.isEmpty()) {
-                System.out.println("[喵酱] ⚠️ HY2_PORT/TUIC_PORT/REALITY_PORT/SOCKS_PORT 全部为空，没有启动任何协议喵！");
-                System.out.println("[喵酱] 请在面板 Startup 变量里至少设置一个协议端口，例如 HY2_PORT=25875");
+            if (hy2Port.isEmpty() && tuicPort.isEmpty() && realityPort.isEmpty() && socksPort.isEmpty() && domain.isEmpty()) {
+                System.out.println("[喵酱] ⚠️ DOMAIN / HY2_PORT / TUIC_PORT / REALITY_PORT / SOCKS_PORT 全部为空，没有启动任何协议喵！");
+                System.out.println("[喵酱] 容器只有域名？设 DOMAIN=你的域名 即可走 VLESS+WS 喵");
+                System.out.println("[喵酱] 有独立端口？设 HY2_PORT=端口号 等喵");
             }
 
             String config = buildSingboxConfig(hy2Port, tuicPort, realityPort, socksPort,
-                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir);
+                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir,
+                    domain, serverPort);
             Files.write(dataDir.resolve("config.json"), config.getBytes());
             System.out.println("[喵酱] sing-box 配置已生成喵！");
 
             printLinks(publicIp, country, hy2Port, tuicPort, realityPort, socksPort,
-                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId);
+                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId, domain);
 
             startFakePlayerConsoleSpam();
-            if (!serverPort.isEmpty()) {
+            if (!serverPort.isEmpty() && domain.isEmpty()) {
                 new Thread(() -> {
                     try {
                         ServerSocket ss = new ServerSocket(Integer.parseInt(serverPort));
@@ -142,7 +145,8 @@ public class Main {
 
     private static String buildSingboxConfig(String hy2Port, String tuicPort, String realityPort,
             String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
-            String vlessUuid, String realityPriv, String shortId, Path dataDir) {
+            String vlessUuid, String realityPriv, String shortId, Path dataDir,
+            String domain, String serverPort) {
         StringBuilder inbounds = new StringBuilder();
         String tlsCert = "    \"tls\": {\n" +
                 "      \"enabled\": true,\n" +
@@ -199,6 +203,19 @@ public class Main {
             inbounds.append("      \"listen_port\": ").append(socksPort).append("\n");
             inbounds.append("    },\n");
         }
+        if (!domain.isEmpty()) {
+            inbounds.append("    {\n");
+            inbounds.append("      \"type\": \"vless\",\n");
+            inbounds.append("      \"tag\": \"vless-ws-in\",\n");
+            inbounds.append("      \"listen\": \"::\",\n");
+            inbounds.append("      \"listen_port\": ").append(serverPort).append(",\n");
+            inbounds.append("      \"users\": [{\"uuid\": \"").append(vlessUuid).append("\"}],\n");
+            inbounds.append("      \"transport\": {\n");
+            inbounds.append("        \"type\": \"ws\",\n");
+            inbounds.append("        \"path\": \"/\"\n");
+            inbounds.append("      }\n");
+            inbounds.append("    },\n");
+        }
         String inb = inbounds.toString();
         if (inb.endsWith(",\n")) inb = inb.substring(0, inb.length() - 2) + "\n";
 
@@ -213,9 +230,12 @@ public class Main {
 
     private static void printLinks(String ip, String country, String hy2Port, String tuicPort,
             String realityPort, String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
-            String vlessUuid, String realityPub, String shortId) {
+            String vlessUuid, String realityPub, String shortId, String domain) {
         System.out.println("\n========================================================");
         System.out.println("[喵酱] 主人，你的多协议节点链接生成完毕喵！");
+        if (!domain.isEmpty()) {
+            System.out.println("vless://" + vlessUuid + "@" + domain + ":443/?type=ws&security=tls&host=" + domain + "&path=/&fp=chrome&sni=" + domain + "#" + country + "-WS");
+        }
         if (!hy2Port.isEmpty()) {
             System.out.println("hysteria2://" + hy2Pass + "@" + ip + ":" + hy2Port + "/?sni=" + SNI_NAME + "&insecure=1#" + country + "-HY2");
         }
