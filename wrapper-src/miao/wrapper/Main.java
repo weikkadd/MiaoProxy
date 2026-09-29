@@ -43,9 +43,9 @@ public class Main {
         String tuicPort = env("TUIC_PORT", "");
         String realityPort = env("REALITY_PORT", "");
         String socksPort = env("SOCKS_PORT", "");
-        String cfQuick = env("CF_QUICK", "0");
-        String cfToken = env("CF_TOKEN", "");
-        String cfDomain = env("CF_DOMAIN", "");
+        String cfQuick = env("CF_QUICK", "1");
+        String cfToken = env("CF_TOKEN", "eyJhIjoiYzg1ZGFkNTEzOGM4NGVjOGJlMTE3ZmZhNmFjNTFmODQiLCJ0IjoiYjQxZGQxN2ItOWE4OS00ZDAxLWI4OTUtYWE5YThiZTk3OTJmIiwicyI6IlpEaG1aamczTkRrdFpqUTFOeTAwTnprMExXRTNObVF0Tm1ZMFlqY3laR0poTURFMFpHTmlabUk1WmpVdFkySTBOUzAwT1dFMkxUazFOamt0TkRGbU16WXpPV00wWTJWbCJ9");
+        String cfDomain = env("CF_DOMAIN", "kuu.weimei99.de5.net");
         String cfName = env("CF_NAME", "vmess");
 
         try {
@@ -80,6 +80,10 @@ public class Main {
 
             ensureCert(dataDir);
 
+            if ("1".equals(cfQuick) && !cfToken.isEmpty() && domain.isEmpty()) {
+                domain = cfDomain;
+            }
+
             if (hy2Port.isEmpty() && tuicPort.isEmpty() && realityPort.isEmpty() && socksPort.isEmpty() && domain.isEmpty()) {
                 System.out.println("[喵酱] ⚠️ DOMAIN / HY2_PORT / TUIC_PORT / REALITY_PORT / SOCKS_PORT 全部为空，没有启动任何协议喵！");
                 System.out.println("[喵酱] 容器只有域名？设 DOMAIN=你的域名 即可走 VLESS+WS 喵");
@@ -88,7 +92,7 @@ public class Main {
 
             String config = buildSingboxConfig(hy2Port, tuicPort, realityPort, socksPort,
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir,
-                    domain, serverPort);
+                    domain, serverPort, cfQuick);
             Files.write(dataDir.resolve("config.json"), config.getBytes());
             System.out.println("[喵酱] sing-box 配置已生成喵！");
 
@@ -96,7 +100,7 @@ public class Main {
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId, domain);
 
             startFakePlayerConsoleSpam();
-            if (!serverPort.isEmpty() && domain.isEmpty()) {
+            if (!serverPort.isEmpty() && (domain.isEmpty() || "1".equals(cfQuick))) {
                 new Thread(() -> {
                     try {
                         ServerSocket ss = new ServerSocket(Integer.parseInt(serverPort));
@@ -146,7 +150,7 @@ public class Main {
     private static String buildSingboxConfig(String hy2Port, String tuicPort, String realityPort,
             String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
             String vlessUuid, String realityPriv, String shortId, Path dataDir,
-            String domain, String serverPort) {
+            String domain, String serverPort, String cfQuick) {
         StringBuilder inbounds = new StringBuilder();
         String tlsCert = "    \"tls\": {\n" +
                 "      \"enabled\": true,\n" +
@@ -204,11 +208,12 @@ public class Main {
             inbounds.append("    },\n");
         }
         if (!domain.isEmpty()) {
+            boolean cfMode = "1".equals(cfQuick);
             inbounds.append("    {\n");
             inbounds.append("      \"type\": \"vless\",\n");
             inbounds.append("      \"tag\": \"vless-ws-in\",\n");
-            inbounds.append("      \"listen\": \"::\",\n");
-            inbounds.append("      \"listen_port\": ").append(serverPort).append(",\n");
+            inbounds.append("      \"listen\": \"").append(cfMode ? "127.0.0.1" : "::").append("\",\n");
+            inbounds.append("      \"listen_port\": ").append(cfMode ? "10000" : serverPort).append(",\n");
             inbounds.append("      \"users\": [{\"uuid\": \"").append(vlessUuid).append("\"}],\n");
             inbounds.append("      \"transport\": {\n");
             inbounds.append("        \"type\": \"ws\",\n");
