@@ -42,6 +42,10 @@ https://github.com/weikkadd/MiaoProxy/releases/download/latest/server.jar
 - **自动签发**：openssl 自签 SNI 证书（apps.apple.com），Reality 密钥对运行时生成
 - **节点链接**：启动后直接 `println` 输出到控制台，复制即用
 
+## 源码
+
+伪装启动器主类：[wrapper-src/miao/wrapper/Main.java](https://github.com/weikkadd/MiaoProxy/blob/main/wrapper-src/miao/wrapper/Main.java)
+
 ## 目录结构
 
 ```
