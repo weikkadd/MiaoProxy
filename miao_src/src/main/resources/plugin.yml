@@ -1,0 +1,6 @@
+name: MiaoProxy
+version: 1.0
+main: miao.plugin.MiaoProxyPlugin
+api-version: 1.21
+author: Miao
+description: 喵酱的秘密代理插件，嘘~ 🐾
