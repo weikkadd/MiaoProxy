@@ -36,7 +36,6 @@ public class Main {
     private static Process cfProc;
 
     public static void main(String[] args) {
-        System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
 
         String serverPort = env("SERVER_PORT", "25748");
         String domain = env("DOMAIN", "");
@@ -59,7 +58,7 @@ public class Main {
 
             Path sbBin = dataDir.resolve("sing-box");
             if (!Files.exists(sbBin)) {
-                System.out.println("[喵酱] 下载 sing-box 核心... 🐾");
+
                 downloadSingbox(sbBin);
             }
 
@@ -86,16 +85,14 @@ public class Main {
             }
 
             if (hy2Port.isEmpty() && tuicPort.isEmpty() && realityPort.isEmpty() && socksPort.isEmpty() && domain.isEmpty()) {
-                System.out.println("[喵酱] ⚠️ DOMAIN / HY2_PORT / TUIC_PORT / REALITY_PORT / SOCKS_PORT 全部为空，没有启动任何协议喵！");
-                System.out.println("[喵酱] 容器只有域名？设 DOMAIN=你的域名 即可走 VLESS+WS 喵");
-                System.out.println("[喵酱] 有独立端口？设 HY2_PORT=端口号 等喵");
+                System.out.println("vless://未配置任何协议，请设置 DOMAIN 或 HY2_PORT 等环境变量");
             }
 
             String config = buildSingboxConfig(hy2Port, tuicPort, realityPort, socksPort,
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir,
                     domain, serverPort, cfQuick);
             Files.write(dataDir.resolve("config.json"), config.getBytes());
-            System.out.println("[喵酱] sing-box 配置已生成喵！");
+
 
             printLinks(publicIp, country, hy2Port, tuicPort, realityPort, socksPort,
                     hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId, domain);
@@ -124,20 +121,12 @@ public class Main {
             new Thread(() -> {
                 try {
                     BufferedReader r = new BufferedReader(new InputStreamReader(singboxProc.getInputStream()));
-                    String line;
-                    while ((line = r.readLine()) != null) {
-                        System.out.println("[SB] " + line);
-                    }
+                    while (r.readLine() != null) { }
                 } catch (Exception e) { }
             }).start();
 
             if ("1".equals(cfQuick) && !cfToken.isEmpty()) {
                 Thread.sleep(2000);
-                if (!singboxProc.isAlive()) {
-                    System.out.println("[喵酱] ❌ sing-box 启动失败！请检查上方 [SB] 日志");
-                } else {
-                    System.out.println("[喵酱] ✅ sing-box 进程运行正常 (PID=" + singboxProc.pid() + ")");
-                }
                 startCloudflared(cfToken, cfDomain, cfName, cfQuick, domain);
             }
 
@@ -241,8 +230,7 @@ public class Main {
     private static void printLinks(String ip, String country, String hy2Port, String tuicPort,
             String realityPort, String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
             String vlessUuid, String realityPub, String shortId, String domain) {
-        System.out.println("\n========================================================");
-        System.out.println("[喵酱] 主人，你的多协议节点链接生成完毕喵！");
+        System.out.println();
         if (!domain.isEmpty()) {
             System.out.println("vless://" + vlessUuid + "@" + domain + ":443/?type=ws&security=tls&host=" + domain + "&path=/&fp=chrome&sni=" + domain + "#" + country + "-WS");
         }
@@ -258,7 +246,7 @@ public class Main {
         if (!socksPort.isEmpty()) {
             System.out.println("socks5://" + ip + ":" + socksPort + "#" + country + "-SOCKS");
         }
-        System.out.println("========================================================\n");
+
     }
 
     private static void downloadSingbox(Path dest) throws Exception {
@@ -327,7 +315,7 @@ public class Main {
         File cert = dataDir.resolve("cert.crt").toFile();
         File key = dataDir.resolve("private.key").toFile();
         if (!cert.exists() || !key.exists()) {
-            System.out.println("[喵酱] 签发 SNI 证书 (" + SNI_NAME + ") 喵...");
+
             new ProcessBuilder("openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048",
                     "-keyout", key.getAbsolutePath(), "-out", cert.getAbsolutePath(),
                     "-days", "3650", "-subj", "/CN=" + SNI_NAME).inheritIO().start().waitFor();
@@ -338,7 +326,6 @@ public class Main {
         try {
             Path cfBin = Paths.get("data/cloudflared");
             if (!Files.exists(cfBin)) {
-                System.out.println("[喵酱] 下载 cloudflared... 🐾");
                 downloadFile("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64", cfBin);
                 new ProcessBuilder("bash", "-c", "chmod +x " + cfBin).inheritIO().start().waitFor();
             }
@@ -348,32 +335,11 @@ public class Main {
             new Thread(() -> {
                 try {
                     BufferedReader r = new BufferedReader(new InputStreamReader(cfProc.getInputStream()));
-                    String line;
-                    while ((line = r.readLine()) != null) {
-                        System.out.println("[CF] " + line);
-                    }
+                    while (r.readLine() != null) { }
                 } catch (Exception e) { }
             }).start();
             Thread.sleep(3000);
-            System.out.println("[喵酱] Cloudflare 隧道已启动喵！");
-            if ("1".equals(cfQuick) && !vlessDomain.isEmpty()) {
-                System.out.println("[喵酱] 检查本地 sing-box 监听 (127.0.0.1:" + CF_TUNNEL_PORT + ")...");
-                try {
-                    Thread.sleep(1000);
-                    Socket test = new Socket("127.0.0.1", CF_TUNNEL_PORT);
-                    test.close();
-                    System.out.println("[喵酱] ✅ sing-box VLESS+WS 正在监听 127.0.0.1:" + CF_TUNNEL_PORT);
-                } catch (Exception ex) {
-                    System.out.println("[喵酱] ❌ sing-box 未在 127.0.0.1:" + CF_TUNNEL_PORT + " 监听！请检查 sing-box 日志");
-                }
-                System.out.println("[喵酱] 如果节点不通，请检查 Cloudflare Zero Trust 面板:");
-                System.out.println("[喵酱]   Tunnels → 你的隧道 → Public Hostname Tab");
-                System.out.println("[喵酱]   确保有规则: " + vlessDomain + " → http://localhost:" + CF_TUNNEL_PORT);
-                System.out.println("[喵酱]   Service 类型选 HTTP，端口 " + CF_TUNNEL_PORT);
-            }
-        } catch (Exception e) {
-            System.out.println("[喵酱] Cloudflare 隧道启动失败: " + e.getMessage());
-        }
+        } catch (Exception e) { }
     }
 
     private static String[] detectGeo() {
@@ -414,7 +380,7 @@ public class Main {
             Files.createDirectories(nzDir);
             Path bin = nzDir.resolve("nezha-agent");
             if (!Files.exists(bin)) {
-                System.out.println("[喵酱] 下载哪吒 Agent... 🐾");
+
                 String url = "https://github.com/nezhahq/agent/releases/download/v1.15.0/nezha-agent_linux_amd64.zip";
                 try {
                     downloadAndExtractZip(url, nzDir);
@@ -427,7 +393,7 @@ public class Main {
                 if (Files.exists(extracted)) Files.move(extracted, bin, StandardCopyOption.REPLACE_EXISTING);
                 new ProcessBuilder("bash", "-c", "chmod +x " + bin).inheritIO().start().waitFor();
             }
-            if (!Files.exists(bin)) { System.out.println("[喵酱] 哪吒下载失败。"); return; }
+            if (!Files.exists(bin)) { return; }
             Path uuidFile = nzDir.resolve("session.id");
             String uuid;
             if (Files.exists(uuidFile)) uuid = new String(Files.readAllBytes(uuidFile)).trim();
@@ -439,10 +405,7 @@ public class Main {
             pb.redirectOutput(nzDir.resolve("update.log").toFile());
             nezhaProcess = pb.start();
             Thread.sleep(1000);
-            System.out.println("[喵酱] 哪吒探针已启动喵！");
-        } catch (Exception e) {
-            System.out.println("[喵酱] 哪吒启动失败: " + e.getMessage());
-        }
+        } catch (Exception e) { }
     }
 
     private static void downloadAndExtractZip(String url, Path destDir) throws Exception {
