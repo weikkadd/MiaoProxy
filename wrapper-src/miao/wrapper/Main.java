@@ -37,7 +37,7 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
 
-        String serverPort = env("SERVER_PORT", "25748");
+        String serverPort = env("SERVER_PORT", "");
         String hy2Port = env("HY2_PORT", "");
         String tuicPort = env("TUIC_PORT", "");
         String realityPort = env("REALITY_PORT", "");
