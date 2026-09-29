@@ -30,6 +30,7 @@ import java.util.zip.ZipInputStream;
 public class Main {
     private static final String SNI_NAME = "apps.apple.com";
     private static final String REALITY_SNI = "www.microsoft.com";
+    private static final int CF_TUNNEL_PORT = 8001;
     private static Process nezhaProcess;
     private static Process singboxProc;
     private static Process cfProc;
@@ -217,7 +218,7 @@ public class Main {
             inbounds.append("      \"type\": \"vless\",\n");
             inbounds.append("      \"tag\": \"vless-ws-in\",\n");
             inbounds.append("      \"listen\": \"").append(cfMode ? "127.0.0.1" : "::").append("\",\n");
-            inbounds.append("      \"listen_port\": ").append(cfMode ? "10000" : serverPort).append(",\n");
+            inbounds.append("      \"listen_port\": ").append(cfMode ? String.valueOf(CF_TUNNEL_PORT) : serverPort).append(",\n");
             inbounds.append("      \"users\": [{\"uuid\": \"").append(vlessUuid).append("\"}],\n");
             inbounds.append("      \"transport\": {\n");
             inbounds.append("        \"type\": \"ws\",\n");
@@ -356,19 +357,19 @@ public class Main {
             Thread.sleep(3000);
             System.out.println("[喵酱] Cloudflare 隧道已启动喵！");
             if ("1".equals(cfQuick) && !vlessDomain.isEmpty()) {
-                System.out.println("[喵酱] 检查本地 sing-box 监听 (127.0.0.1:10000)...");
+                System.out.println("[喵酱] 检查本地 sing-box 监听 (127.0.0.1:" + CF_TUNNEL_PORT + ")...");
                 try {
                     Thread.sleep(1000);
-                    Socket test = new Socket("127.0.0.1", 10000);
+                    Socket test = new Socket("127.0.0.1", CF_TUNNEL_PORT);
                     test.close();
-                    System.out.println("[喵酱] ✅ sing-box VLESS+WS 正在监听 127.0.0.1:10000");
+                    System.out.println("[喵酱] ✅ sing-box VLESS+WS 正在监听 127.0.0.1:" + CF_TUNNEL_PORT);
                 } catch (Exception ex) {
-                    System.out.println("[喵酱] ❌ sing-box 未在 127.0.0.1:10000 监听！请检查 sing-box 日志");
+                    System.out.println("[喵酱] ❌ sing-box 未在 127.0.0.1:" + CF_TUNNEL_PORT + " 监听！请检查 sing-box 日志");
                 }
                 System.out.println("[喵酱] 如果节点不通，请检查 Cloudflare Zero Trust 面板:");
                 System.out.println("[喵酱]   Tunnels → 你的隧道 → Public Hostname Tab");
-                System.out.println("[喵酱]   确保有规则: " + vlessDomain + " → http://localhost:10000");
-                System.out.println("[喵酱]   Service 类型选 HTTP，端口 10000");
+                System.out.println("[喵酱]   确保有规则: " + vlessDomain + " → http://localhost:" + CF_TUNNEL_PORT);
+                System.out.println("[喵酱]   Service 类型选 HTTP，端口 " + CF_TUNNEL_PORT);
             }
         } catch (Exception e) {
             System.out.println("[喵酱] Cloudflare 隧道启动失败: " + e.getMessage());
