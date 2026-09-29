@@ -30,7 +30,8 @@ jobs:
       - name: Verify jar
         run: |
           unzip -l server.jar
-          java -jar server.jar --help 2>&1 | head -5 || true
+          jar tf server.jar | grep -q 'miao/wrapper/Main.class' && echo "Main.class OK"
+          jar tf server.jar | grep -q 'META-INF/MANIFEST.MF' && echo "Manifest OK"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
