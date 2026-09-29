@@ -40,7 +40,9 @@ jobs:
           path: server.jar
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: server.jar (latest)
           files: server.jar
+          make_latest: true
