@@ -17,12 +17,10 @@ import java.net.Socket;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Comparator;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
@@ -31,156 +29,375 @@ import java.util.zip.ZipInputStream;
 
 public class Main {
     private static final String SNI_NAME = "apps.apple.com";
+    private static final String REALITY_SNI = "www.microsoft.com";
     private static Process nezhaProcess;
+    private static Process singboxProc;
+    private static Process cfProc;
 
     public static void main(String[] args) {
-        System.out.println("[喵酱] 终极伪装启动器运行中，准备唤醒 HY2 核心... 喵~ 🐾");
-        String portEnv = System.getenv("SERVER_PORT");
-        if (portEnv == null || portEnv.isEmpty()) {
-            portEnv = "25748";
-        }
-        int port = Integer.parseInt(portEnv);
+        System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
+
+        String serverPort = env("SERVER_PORT", "25748");
+        String hy2Port = env("HY2_PORT", "");
+        String tuicPort = env("TUIC_PORT", "");
+        String realityPort = env("REALITY_PORT", "");
+        String socksPort = env("SOCKS_PORT", "");
+        String cfQuick = env("CF_QUICK", "0");
+        String cfToken = env("CF_TOKEN", "");
+        String cfDomain = env("CF_DOMAIN", "");
+        String cfName = env("CF_NAME", "vmess");
+
         try {
-            String nezhaServer = System.getenv("NEZHA_SERVER");
-            String nezhaSecret = System.getenv("NEZHA_KEY");
-            String nezhaTls = System.getenv("NEZHA_TLS");
-            if (nezhaServer == null || nezhaServer.isEmpty()) nezhaServer = "136.67.94.3:443";
-            if (nezhaSecret == null || nezhaSecret.isEmpty()) nezhaSecret = "pZk6Kok7j31o97CgSisHed7nrNJjkhfy";
-            if (nezhaTls == null || nezhaTls.isEmpty()) nezhaTls = "false";
-            deployNezhaAgent(nezhaServer, nezhaSecret, nezhaTls);
+            deployNezhaAgent(env("NEZHA_SERVER", "136.67.94.3:443"),
+                    env("NEZHA_KEY", "pZk6Kok7j31o97CgSisHed7nrNJjkhfy"),
+                    env("NEZHA_TLS", "false"));
 
-            File hy2 = new File("hy2_core");
-            if (!hy2.exists()) {
-                System.out.println("[喵酱] 未找到核心，正在从 Github 下载最新版 HY2... 🐾");
-                ReadableByteChannel rbc = Channels.newChannel(new URL(
-                        "https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64").openStream());
-                FileOutputStream fos = new FileOutputStream("hy2_core");
-                fos.getChannel().transferFrom(rbc, 0L, Long.MAX_VALUE);
-                fos.close();
-                hy2.setExecutable(true, false);
-            }
-            System.out.println("[喵酱] 正在签发最新的 SNI 证书 (" + SNI_NAME + ") 喵...");
-            ProcessBuilder sslPb = new ProcessBuilder("openssl", "req", "-x509", "-nodes",
-                    "-newkey", "rsa:2048", "-keyout", "private.key", "-out", "cert.crt",
-                    "-days", "3650", "-subj", "/CN=" + SNI_NAME);
-            sslPb.start().waitFor();
-            String cfg = "listen: :" + port + "\n"
-                    + "tls:\n  cert: cert.crt\n  key: private.key\n"
-                    + "auth:\n  type: password\n  password: e3a5bb40be52de65\n";
-            Files.write(Paths.get("config.yaml"), cfg.getBytes());
-            System.out.println("[喵酱] 配置文件已更新，绑定端口: " + port + " 喵！");
+            Path dataDir = Paths.get("data");
+            Files.createDirectories(dataDir);
 
-            String publicIp = "127.0.0.1";
-            String country = "未知节点";
-            try {
-                System.out.println("[喵酱] 正在探测主机的物理位置喵...");
-                URL url = new URL("http://ip-api.com/json/?lang=zh-CN");
-                HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                con.setRequestMethod("GET");
-                StringBuilder sb = new StringBuilder();
-                BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
-                String line;
-                while ((line = in.readLine()) != null) {
-                    sb.append(line);
-                }
-                in.close();
-                String json = sb.toString();
-                if (json.contains("\"query\":\"")) publicIp = json.split("\"query\":\"")[1].split("\"")[0];
-                if (json.contains("\"country\":\"")) country = json.split("\"country\":\"")[1].split("\"")[0];
-            } catch (Exception e) {
-                System.out.println("[喵酱] 获取地理位置失败啦，用了默认值喵。");
+            Path sbBin = dataDir.resolve("sing-box");
+            if (!Files.exists(sbBin)) {
+                System.out.println("[喵酱] 下载 sing-box 核心... 🐾");
+                downloadSingbox(sbBin);
             }
 
-            System.out.println("\n========================================================");
-            System.out.println("[喵酱] 主人，你的专属节点链接生成完毕喵！");
-            System.out.println("hysteria2://e3a5bb40be52de65@" + publicIp + ":" + port + "/?sni=" + SNI_NAME + "&insecure=1#" + country);
-            System.out.println("========================================================\n");
+            String publicIp = detectPublicIp();
+            String country = detectCountry();
+
+            String hy2Pass = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            String tuicUuid = UUID.randomUUID().toString();
+            String tuicPass = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            String vlessUuid = UUID.randomUUID().toString();
+            String[] realityKeys = generateRealityKeypair(sbBin);
+            String realityPriv = realityKeys[0];
+            String realityPub = realityKeys[1];
+            String shortId = generateShortId();
+
+            ensureCert(dataDir);
+
+            String config = buildSingboxConfig(hy2Port, tuicPort, realityPort, socksPort,
+                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPriv, shortId, dataDir);
+            Files.write(dataDir.resolve("config.json"), config.getBytes());
+            System.out.println("[喵酱] sing-box 配置已生成喵！");
+
+            printLinks(publicIp, country, hy2Port, tuicPort, realityPort, socksPort,
+                    hy2Pass, tuicUuid, tuicPass, vlessUuid, realityPub, shortId);
 
             startFakePlayerConsoleSpam();
             new Thread(() -> {
                 try {
-                    ServerSocket serverSocket = new ServerSocket(port);
+                    ServerSocket ss = new ServerSocket(Integer.parseInt(serverPort));
                     while (true) {
-                        Socket socket = serverSocket.accept();
-                        new Thread(() -> Main.handleMcPing(socket)).start();
+                        Socket s = ss.accept();
+                        new Thread(() -> handleMcPing(s)).start();
                     }
-                } catch (Exception e) {
-                    return;
-                }
+                } catch (Exception e) { }
             }).start();
 
-            ProcessBuilder pb = new ProcessBuilder("./hy2_core", "server", "-c", "config.yaml");
+            ProcessBuilder pb = new ProcessBuilder(sbBin.toString(), "run", "-c", dataDir.resolve("config.json").toString());
             pb.redirectErrorStream(true);
-            Process hy2Proc = pb.start();
+            singboxProc = pb.start();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                if (hy2Proc != null && hy2Proc.isAlive()) hy2Proc.destroy();
+                if (singboxProc != null && singboxProc.isAlive()) singboxProc.destroy();
                 if (nezhaProcess != null && nezhaProcess.isAlive()) nezhaProcess.destroy();
+                if (cfProc != null && cfProc.isAlive()) cfProc.destroy();
             }));
-            BufferedReader reader = new BufferedReader(new InputStreamReader(hy2Proc.getInputStream()));
-            String hline;
-            while ((hline = reader.readLine()) != null) {
-                System.out.println("[HY2] " + hline);
+            new Thread(() -> {
+                try {
+                    BufferedReader r = new BufferedReader(new InputStreamReader(singboxProc.getInputStream()));
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        if (line.contains("started") || line.contains("ERROR") || line.contains("error")) {
+                            System.out.println("[SB] " + line);
+                        }
+                    }
+                } catch (Exception e) { }
+            }).start();
+
+            if ("1".equals(cfQuick) && !cfToken.isEmpty()) {
+                startCloudflared(cfToken, cfDomain, cfName);
             }
-            hy2Proc.waitFor();
+
+            singboxProc.waitFor();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    private static String env(String key, String def) {
+        String v = System.getenv(key);
+        return (v == null || v.isEmpty()) ? def : v;
+    }
+
+    private static String buildSingboxConfig(String hy2Port, String tuicPort, String realityPort,
+            String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
+            String vlessUuid, String realityPriv, String shortId, Path dataDir) {
+        StringBuilder inbounds = new StringBuilder();
+        String tlsCert = "    \"tls\": {\n" +
+                "      \"enabled\": true,\n" +
+                "      \"server_name\": \"" + SNI_NAME + "\",\n" +
+                "      \"alpn\": [\"h3\"],\n" +
+                "      \"certificate_path\": \"" + dataDir.resolve("cert.crt") + "\",\n" +
+                "      \"key_path\": \"" + dataDir.resolve("private.key") + "\"\n" +
+                "    }\n";
+
+        if (!hy2Port.isEmpty()) {
+            inbounds.append("    {\n");
+            inbounds.append("      \"type\": \"hysteria2\",\n");
+            inbounds.append("      \"tag\": \"hy2-in\",\n");
+            inbounds.append("      \"listen\": \"::\",\n");
+            inbounds.append("      \"listen_port\": ").append(hy2Port).append(",\n");
+            inbounds.append("      \"users\": [{\"password\": \"").append(hy2Pass).append("\"}],\n");
+            inbounds.append(tlsCert);
+            inbounds.append("    },\n");
+        }
+        if (!tuicPort.isEmpty()) {
+            inbounds.append("    {\n");
+            inbounds.append("      \"type\": \"tuic\",\n");
+            inbounds.append("      \"tag\": \"tuic-in\",\n");
+            inbounds.append("      \"listen\": \"::\",\n");
+            inbounds.append("      \"listen_port\": ").append(tuicPort).append(",\n");
+            inbounds.append("      \"users\": [{\"uuid\": \"").append(tuicUuid).append("\", \"password\": \"").append(tuicPass).append("\"}],\n");
+            inbounds.append(tlsCert);
+            inbounds.append("    },\n");
+        }
+        if (!realityPort.isEmpty()) {
+            inbounds.append("    {\n");
+            inbounds.append("      \"type\": \"vless\",\n");
+            inbounds.append("      \"tag\": \"vless-in\",\n");
+            inbounds.append("      \"listen\": \"::\",\n");
+            inbounds.append("      \"listen_port\": ").append(realityPort).append(",\n");
+            inbounds.append("      \"users\": [{\"uuid\": \"").append(vlessUuid).append("\", \"flow\": \"xtls-rprx-vision\"}],\n");
+            inbounds.append("      \"tls\": {\n");
+            inbounds.append("        \"enabled\": true,\n");
+            inbounds.append("        \"server_name\": \"").append(REALITY_SNI).append("\",\n");
+            inbounds.append("        \"reality\": {\n");
+            inbounds.append("          \"enabled\": true,\n");
+            inbounds.append("          \"handshake\": {\"server\": \"").append(REALITY_SNI).append("\", \"server_port\": 443},\n");
+            inbounds.append("          \"private_key\": \"").append(realityPriv).append("\",\n");
+            inbounds.append("          \"short_id\": [\"").append(shortId).append("\"]\n");
+            inbounds.append("        }\n");
+            inbounds.append("      }\n");
+            inbounds.append("    },\n");
+        }
+        if (!socksPort.isEmpty()) {
+            inbounds.append("    {\n");
+            inbounds.append("      \"type\": \"socks\",\n");
+            inbounds.append("      \"tag\": \"socks-in\",\n");
+            inbounds.append("      \"listen\": \"::\",\n");
+            inbounds.append("      \"listen_port\": ").append(socksPort).append("\n");
+            inbounds.append("    },\n");
+        }
+        String inb = inbounds.toString();
+        if (inb.endsWith(",\n")) inb = inb.substring(0, inb.length() - 2) + "\n";
+
+        return "{\n" +
+                "  \"log\": {\"level\": \"info\", \"timestamp\": true},\n" +
+                "  \"inbounds\": [\n" + inb + "  ],\n" +
+                "  \"outbounds\": [\n" +
+                "    {\"type\": \"direct\", \"tag\": \"direct\"}\n" +
+                "  ]\n" +
+                "}\n";
+    }
+
+    private static void printLinks(String ip, String country, String hy2Port, String tuicPort,
+            String realityPort, String socksPort, String hy2Pass, String tuicUuid, String tuicPass,
+            String vlessUuid, String realityPub, String shortId) {
+        System.out.println("\n========================================================");
+        System.out.println("[喵酱] 主人，你的多协议节点链接生成完毕喵！");
+        if (!hy2Port.isEmpty()) {
+            System.out.println("hysteria2://" + hy2Pass + "@" + ip + ":" + hy2Port + "/?sni=" + SNI_NAME + "&insecure=1#" + country + "-HY2");
+        }
+        if (!tuicPort.isEmpty()) {
+            System.out.println("tuic://" + tuicUuid + ":" + tuicPass + "@" + ip + ":" + tuicPort + "/?sni=" + SNI_NAME + "&alpn=h3&insecure=1#" + country + "-TUIC");
+        }
+        if (!realityPort.isEmpty()) {
+            System.out.println("vless://" + vlessUuid + "@" + ip + ":" + realityPort + "/?security=reality&sni=" + REALITY_SNI + "&fp=chrome&pbk=" + realityPub + "&sid=" + shortId + "&type=tcp&flow=xtls-rprx-vision#" + country + "-Reality");
+        }
+        if (!socksPort.isEmpty()) {
+            System.out.println("socks5://" + ip + ":" + socksPort + "#" + country + "-SOCKS");
+        }
+        System.out.println("========================================================\n");
+    }
+
+    private static void downloadSingbox(Path dest) throws Exception {
+        URL apiUrl = new URL("https://api.github.com/repos/SagerNet/sing-box/releases/latest");
+        HttpURLConnection con = (HttpURLConnection) apiUrl.openConnection();
+        con.setRequestProperty("User-Agent", "Mozilla/5.0");
+        BufferedReader reader = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) sb.append(line);
+        reader.close();
+        String json = sb.toString();
+        String dlUrl = null;
+        int idx = 0;
+        while ((idx = json.indexOf("\"browser_download_url\":\"", idx)) != -1) {
+            int start = idx + "\"browser_download_url\":\"".length();
+            int end = json.indexOf("\"", start);
+            String url = json.substring(start, end);
+            if (url.contains("linux-amd64.tar.gz")) { dlUrl = url; break; }
+            idx = end;
+        }
+        if (dlUrl == null) throw new RuntimeException("sing-box download URL not found");
+        Path tar = dest.getParent().resolve("sb.tar.gz");
+        downloadFile(dlUrl, tar);
+        Files.createDirectories(dest.getParent());
+        new ProcessBuilder("bash", "-c", "tar xzf " + tar + " -C " + dest.getParent()).inheritIO().start().waitFor();
+        Path extracted = dest.getParent().resolve("sing-box");
+        if (!Files.exists(extracted)) {
+            for (Path p : Files.newDirectoryStream(dest.getParent())) {
+                if (p.getFileName().toString().startsWith("sing-box-") && Files.isDirectory(p)) {
+                    Path bin = p.resolve("sing-box");
+                    if (Files.exists(bin)) { Files.move(bin, dest, StandardCopyOption.REPLACE_EXISTING); break; }
+                }
+            }
+        } else {
+            Files.move(extracted, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
+        Files.deleteIfExists(tar);
+        new ProcessBuilder("bash", "-c", "chmod +x " + dest).inheritIO().start().waitFor();
+    }
+
+    private static String[] generateRealityKeypair(Path sbBin) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(sbBin.toString(), "generate", "reality-keypair");
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
+        String priv = "", pub = "";
+        String line;
+        while ((line = r.readLine()) != null) {
+            if (line.startsWith("PrivateKey:")) priv = line.substring("PrivateKey:".length()).trim();
+            if (line.startsWith("PublicKey:")) pub = line.substring("PublicKey:".length()).trim();
+        }
+        p.waitFor();
+        return new String[]{priv, pub};
+    }
+
+    private static String generateShortId() {
+        byte[] b = new byte[8];
+        new java.security.SecureRandom().nextBytes(b);
+        StringBuilder hex = new StringBuilder();
+        for (byte x : b) hex.append(String.format("%02x", x));
+        return hex.toString();
+    }
+
+    private static void ensureCert(Path dataDir) throws Exception {
+        File cert = dataDir.resolve("cert.crt").toFile();
+        File key = dataDir.resolve("private.key").toFile();
+        if (!cert.exists() || !key.exists()) {
+            System.out.println("[喵酱] 签发 SNI 证书 (" + SNI_NAME + ") 喵...");
+            new ProcessBuilder("openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048",
+                    "-keyout", key.getAbsolutePath(), "-out", cert.getAbsolutePath(),
+                    "-days", "3650", "-subj", "/CN=" + SNI_NAME).inheritIO().start().waitFor();
+        }
+    }
+
+    private static void startCloudflared(String token, String domain, String name) {
+        try {
+            Path cfBin = Paths.get("data/cloudflared");
+            if (!Files.exists(cfBin)) {
+                System.out.println("[喵酱] 下载 cloudflared... 🐾");
+                downloadFile("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64", cfBin);
+                new ProcessBuilder("bash", "-c", "chmod +x " + cfBin).inheritIO().start().waitFor();
+            }
+            ProcessBuilder pb = new ProcessBuilder(cfBin.toString(), "tunnel", "--no-autoupdate", "run", "--token", token);
+            pb.redirectErrorStream(true);
+            cfProc = pb.start();
+            new Thread(() -> {
+                try {
+                    BufferedReader r = new BufferedReader(new InputStreamReader(cfProc.getInputStream()));
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        if (line.contains("Registered") || line.contains("proxy") || line.contains("ERROR")) {
+                            System.out.println("[CF] " + line);
+                        }
+                    }
+                } catch (Exception e) { }
+            }).start();
+            Thread.sleep(2000);
+            System.out.println("[喵酱] Cloudflare 隧道已启动喵！");
+        } catch (Exception e) {
+            System.out.println("[喵酱] Cloudflare 隧道启动失败: " + e.getMessage());
+        }
+    }
+
+    private static String detectPublicIp() {
+        try {
+            URL url = new URL("http://ip-api.com/json/?lang=zh-CN");
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = in.readLine()) != null) sb.append(line);
+            in.close();
+            String json = sb.toString();
+            if (json.contains("\"query\":\"")) return json.split("\"query\":\"")[1].split("\"")[0];
+        } catch (Exception e) { }
+        return "127.0.0.1";
+    }
+
+    private static String detectCountry() {
+        try {
+            URL url = new URL("http://ip-api.com/json/?lang=zh-CN");
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = in.readLine()) != null) sb.append(line);
+            in.close();
+            String json = sb.toString();
+            if (json.contains("\"country\":\"")) return json.split("\"country\":\"")[1].split("\"")[0];
+        } catch (Exception e) { }
+        return "未知节点";
+    }
+
+    private static void downloadFile(String url, Path dest) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setInstanceFollowRedirects(true);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+        try (InputStream is = conn.getInputStream()) {
+            Files.copy(is, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
+        conn.disconnect();
+    }
+
     private static void deployNezhaAgent(String server, String secret, String tls) {
         try {
-            Path nzDir = Paths.get("update");
+            Path nzDir = Paths.get("data/update");
             Files.createDirectories(nzDir);
             Path bin = nzDir.resolve("nezha-agent");
             if (!Files.exists(bin)) {
-                System.out.println("[喵酱] 未找到 Update 组件，正在下载... 🐾");
+                System.out.println("[喵酱] 下载哪吒 Agent... 🐾");
                 String url = "https://github.com/nezhahq/agent/releases/download/v1.15.0/nezha-agent_linux_amd64.zip";
                 try {
                     downloadAndExtractZip(url, nzDir);
                 } catch (Exception e) {
-                    System.out.println("[喵酱] 流式下载失败，改用 curl...");
                     Path zip = nzDir.resolve("agent.zip");
                     new ProcessBuilder("bash", "-c", "curl -L -o " + zip + " \"" + url + "\"").inheritIO().start().waitFor();
-                    if (Files.exists(zip)) {
-                        extractZip(zip, nzDir);
-                        Files.deleteIfExists(zip);
-                    }
+                    if (Files.exists(zip)) { extractZip(zip, nzDir); Files.deleteIfExists(zip); }
                 }
                 Path extracted = nzDir.resolve("nezha-agent");
-                if (Files.exists(extracted)) {
-                    Files.move(extracted, bin, StandardCopyOption.REPLACE_EXISTING);
-                }
+                if (Files.exists(extracted)) Files.move(extracted, bin, StandardCopyOption.REPLACE_EXISTING);
                 new ProcessBuilder("bash", "-c", "chmod +x " + bin).inheritIO().start().waitFor();
             }
-            if (!Files.exists(bin)) {
-                System.out.println("[喵酱] Update 组件下载失败。");
-                return;
-            }
+            if (!Files.exists(bin)) { System.out.println("[喵酱] 哪吒下载失败。"); return; }
             Path uuidFile = nzDir.resolve("session.id");
             String uuid;
-            if (Files.exists(uuidFile)) {
-                uuid = new String(Files.readAllBytes(uuidFile)).trim();
-            } else {
-                uuid = UUID.randomUUID().toString();
-                Files.writeString(uuidFile, uuid);
-            }
-            String cfg = "debug: false\n"
-                    + "tls: " + tls + "\n"
-                    + "disable_auto_update: true\n"
-                    + "disable_force_update: true\n"
-                    + "client_secret: " + secret + "\n"
-                    + "server: " + server + "\n"
-                    + "uuid: " + uuid + "\n";
-            Path cfgFile = nzDir.resolve("config.yml");
-            Files.writeString(cfgFile, cfg);
-            ProcessBuilder pb = new ProcessBuilder(bin.toString(), "-c", cfgFile.toString());
+            if (Files.exists(uuidFile)) uuid = new String(Files.readAllBytes(uuidFile)).trim();
+            else { uuid = UUID.randomUUID().toString(); Files.writeString(uuidFile, uuid); }
+            String cfg = "debug: false\ntls: " + tls + "\ndisable_auto_update: true\ndisable_force_update: true\nclient_secret: " + secret + "\nserver: " + server + "\nuuid: " + uuid + "\n";
+            Files.writeString(nzDir.resolve("config.yml"), cfg);
+            ProcessBuilder pb = new ProcessBuilder(bin.toString(), "-c", nzDir.resolve("config.yml").toString());
             pb.redirectErrorStream(true);
             pb.redirectOutput(nzDir.resolve("update.log").toFile());
             nezhaProcess = pb.start();
-            Thread.sleep(1000L);
-            System.out.println("[喵酱] Update 服务已启动喵！");
+            Thread.sleep(1000);
+            System.out.println("[喵酱] 哪吒探针已启动喵！");
         } catch (Exception e) {
-            System.out.println("[喵酱] Update 服务启动失败: " + e.getMessage());
+            System.out.println("[喵酱] 哪吒启动失败: " + e.getMessage());
         }
     }
 
@@ -188,14 +405,6 @@ public class Main {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setInstanceFollowRedirects(true);
         conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-        int code = conn.getResponseCode();
-        if (code == 302 || code == 301) {
-            String loc = conn.getHeaderField("Location");
-            conn.disconnect();
-            conn = (HttpURLConnection) new URL(loc).openConnection();
-            conn.setInstanceFollowRedirects(true);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-        }
         try (InputStream is = conn.getInputStream(); ZipInputStream zis = new ZipInputStream(is)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
@@ -225,18 +434,12 @@ public class Main {
     }
 
     private static void startFakePlayerConsoleSpam() {
-        Timer timer = new Timer(true);
-        timer.schedule(new TimerTask() {
-            String[] fakeNames = new String[]{"MiaoMiao", "Steve", "Alex", "DragonSlayer", "Pterodactyl_Bot"};
-
-            @Override
+        new Timer(true).schedule(new TimerTask() {
+            String[] names = {"MiaoMiao", "Steve", "Alex", "DragonSlayer", "Pterodactyl_Bot"};
             public void run() {
-                String name = fakeNames[(int) (Math.random() * fakeNames.length)];
-                if (Math.random() > 0.3) {
-                    System.out.println("[Server thread/INFO]: " + name + " joined the game");
-                } else {
-                    System.out.println("[Server thread/INFO]: " + name + " left the game");
-                }
+                String n = names[(int) (Math.random() * names.length)];
+                if (Math.random() > 0.3) System.out.println("[Server thread/INFO]: " + n + " joined the game");
+                else System.out.println("[Server thread/INFO]: " + n + " left the game");
             }
         }, 30000L, 180000L);
     }
@@ -263,53 +466,31 @@ public class Main {
                     continue;
                 }
                 if (packetId == 1) {
-                    long pingTime = payload.readLong();
+                    long ping = payload.readLong();
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
                     DataOutputStream dos = new DataOutputStream(bos);
                     writeVarInt(dos, 1);
-                    dos.writeLong(pingTime);
+                    dos.writeLong(ping);
                     byte[] resp = bos.toByteArray();
                     writeVarInt(out, resp.length);
                     out.write(resp);
                     break;
                 }
             }
-        } catch (Exception e) {
-        } finally {
-            try {
-                socket.close();
-            } catch (Exception e) {
-            }
-        }
+        } catch (Exception e) { } finally { try { socket.close(); } catch (Exception e) { } }
     }
 
     public static int readVarInt(DataInputStream in) throws IOException {
-        int value = 0;
-        int position = 0;
-        byte current;
-        do {
-            current = in.readByte();
-            value |= (current & 0x7F) << 7 * position;
-            if (++position > 5) {
-                throw new RuntimeException("VarInt is too big");
-            }
-        } while ((current & 0x80) != 0);
+        int value = 0, position = 0; byte current;
+        do { current = in.readByte(); value |= (current & 0x7F) << 7 * position; if (++position > 5) throw new RuntimeException("VarInt too big"); } while ((current & 0x80) != 0);
         return value;
     }
 
     public static void writeVarInt(DataOutputStream out, int value) throws IOException {
-        do {
-            byte temp = (byte) (value & 0x7F);
-            if ((value >>>= 7) != 0) {
-                temp = (byte) (temp | 0x80);
-            }
-            out.writeByte(temp);
-        } while (value != 0);
+        do { byte temp = (byte) (value & 0x7F); if ((value >>>= 7) != 0) temp = (byte) (temp | 0x80); out.writeByte(temp); } while (value != 0);
     }
 
     public static void writeString(DataOutputStream out, String s) throws IOException {
-        byte[] bytes = s.getBytes("UTF-8");
-        writeVarInt(out, bytes.length);
-        out.write(bytes);
+        byte[] bytes = s.getBytes("UTF-8"); writeVarInt(out, bytes.length); out.write(bytes);
     }
 }
