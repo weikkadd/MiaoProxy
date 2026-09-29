@@ -9,7 +9,7 @@
 3. 启动命令改成 `java -jar server.jar`（不走 mcsleepingserverstarter）
 4. 启动，控制台日志里复制节点链接
 
-**默认已预填 Cloudflare 隧道模式，不用设任何变量**，开机自动出 `vless://` 节点链接。
+**CF 隧道模式默认开启，代码已内置 Token + 域名，不用设任何变量**，开机自动出 `vless://` 节点链接。
 
 ## 三种部署模式
 
@@ -21,20 +21,21 @@
 |------|--------|------|
 | `CF_QUICK` | `1` | 自动启用隧道 |
 | `CF_TOKEN` | 已内置 | Cloudflare 隧道 Token |
-| `CF_DOMAIN` | `kuu.weimei99.de5.net` | 隧道域名 |
+| `CF_DOMAIN` | 已内置 | 隧道域名 |
 
 启动后：
 - VLESS+WS 监听 `127.0.0.1:10000`
-- cloudflared 隧道转发 `kuu.weimei99.de5.net → localhost:10000`
-- 节点链接：`vless://uuid@kuu.weimei99.de5.net:443/?type=ws&security=tls&host=kuu.weimei99.de5.net&path=/&fp=chrome#节点-WS`
+- cloudflared 隧道转发流量到 `localhost:10000`
+- 节点链接：`vless://uuid@域名:443/?type=ws&security=tls&host=域名&path=/&fp=chrome#节点-WS`
 
-> **前提**：Cloudflare Zero Trust 面板确认隧道路由 `kuu.weimei99.de5.net` → `http://localhost:10000`
+> **前提**：Cloudflare Zero Trust 面板配好隧道路由（域名 → `http://localhost:10000`）
+> **SERVER_PORT**：面板没有可不填，CF 隧道模式不依赖该端口
 
 ### 模式二：容器域名直连（有域名 + 端口反代）
 
 设一个变量：
 ```
-DOMAIN=delhi-871245.indernos.in
+DOMAIN=你的容器域名
 ```
 VLESS+WS 监听 `SERVER_PORT`，通过域名访问，节点链接用域名:443。
 
@@ -53,14 +54,14 @@ sing-box 直接监听对应端口，节点链接用 IP:端口。
 |------|------|------|
 | `CF_QUICK` | `1` | `1` 启动 Cloudflare 隧道 |
 | `CF_TOKEN` | 已内置 | 隧道 Token |
-| `CF_DOMAIN` | `kuu.weimei99.de5.net` | 隧道域名 |
+| `CF_DOMAIN` | 已内置 | 隧道域名 |
 | `CF_NAME` | `vmess` | 隧道名称 |
 | `DOMAIN` | 空 | 容器域名（模式二），设了走 VLESS+WS 域名直连 |
 | `HY2_PORT` | 空 | Hysteria2 端口（UDP），留空不启动 |
 | `TUIC_PORT` | 空 | TUIC 端口（UDP），留空不启动 |
 | `REALITY_PORT` | 空 | VLESS Reality 端口（TCP），留空不启动 |
 | `SOCKS_PORT` | 空 | SOCKS5 端口，留空不启动 |
-| `SERVER_PORT` | 25748 | MC ping 保活端口（面板自动注入） |
+| `SERVER_PORT` | 25748 | MC ping 保活端口（面板自动注入；没有可不填，CF 隧道模式不需要） |
 | `NEZHA_SERVER` | 136.67.94.3:443 | 哪吒探针地址 |
 | `NEZHA_KEY` | 已内置 | 哪吒客户端密钥 |
 | `NEZHA_TLS` | false | 哪吒是否走 TLS |
