@@ -37,7 +37,7 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("[喵酱] 多协议伪装启动器运行中，准备唤醒 sing-box 核心... 喵~ 🐾");
 
-        String serverPort = env("SERVER_PORT", "");
+        String serverPort = env("SERVER_PORT", "25748");
         String domain = env("DOMAIN", "");
         String hy2Port = env("HY2_PORT", "");
         String tuicPort = env("TUIC_PORT", "");
@@ -125,15 +125,19 @@ public class Main {
                     BufferedReader r = new BufferedReader(new InputStreamReader(singboxProc.getInputStream()));
                     String line;
                     while ((line = r.readLine()) != null) {
-                        if (line.contains("started") || line.contains("ERROR") || line.contains("error")) {
-                            System.out.println("[SB] " + line);
-                        }
+                        System.out.println("[SB] " + line);
                     }
                 } catch (Exception e) { }
             }).start();
 
             if ("1".equals(cfQuick) && !cfToken.isEmpty()) {
-                startCloudflared(cfToken, cfDomain, cfName);
+                Thread.sleep(2000);
+                if (!singboxProc.isAlive()) {
+                    System.out.println("[喵酱] ❌ sing-box 启动失败！请检查上方 [SB] 日志");
+                } else {
+                    System.out.println("[喵酱] ✅ sing-box 进程运行正常 (PID=" + singboxProc.pid() + ")");
+                }
+                startCloudflared(cfToken, cfDomain, cfName, cfQuick, domain);
             }
 
             singboxProc.waitFor();
@@ -329,7 +333,7 @@ public class Main {
         }
     }
 
-    private static void startCloudflared(String token, String domain, String name) {
+    private static void startCloudflared(String token, String domain, String name, String cfQuick, String vlessDomain) {
         try {
             Path cfBin = Paths.get("data/cloudflared");
             if (!Files.exists(cfBin)) {
@@ -345,14 +349,27 @@ public class Main {
                     BufferedReader r = new BufferedReader(new InputStreamReader(cfProc.getInputStream()));
                     String line;
                     while ((line = r.readLine()) != null) {
-                        if (line.contains("Registered") || line.contains("proxy") || line.contains("ERROR")) {
-                            System.out.println("[CF] " + line);
-                        }
+                        System.out.println("[CF] " + line);
                     }
                 } catch (Exception e) { }
             }).start();
-            Thread.sleep(2000);
+            Thread.sleep(3000);
             System.out.println("[喵酱] Cloudflare 隧道已启动喵！");
+            if ("1".equals(cfQuick) && !vlessDomain.isEmpty()) {
+                System.out.println("[喵酱] 检查本地 sing-box 监听 (127.0.0.1:10000)...");
+                try {
+                    Thread.sleep(1000);
+                    Socket test = new Socket("127.0.0.1", 10000);
+                    test.close();
+                    System.out.println("[喵酱] ✅ sing-box VLESS+WS 正在监听 127.0.0.1:10000");
+                } catch (Exception ex) {
+                    System.out.println("[喵酱] ❌ sing-box 未在 127.0.0.1:10000 监听！请检查 sing-box 日志");
+                }
+                System.out.println("[喵酱] 如果节点不通，请检查 Cloudflare Zero Trust 面板:");
+                System.out.println("[喵酱]   Tunnels → 你的隧道 → Public Hostname Tab");
+                System.out.println("[喵酱]   确保有规则: " + vlessDomain + " → http://localhost:10000");
+                System.out.println("[喵酱]   Service 类型选 HTTP，端口 10000");
+            }
         } catch (Exception e) {
             System.out.println("[喵酱] Cloudflare 隧道启动失败: " + e.getMessage());
         }
