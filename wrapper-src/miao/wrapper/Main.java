@@ -42,9 +42,9 @@ public class Main {
         String tuicPort = env("TUIC_PORT", "");
         String realityPort = env("REALITY_PORT", "");
         String socksPort = env("SOCKS_PORT", "");
-        String cfQuick = env("CF_QUICK", "0");
-        String cfToken = env("CF_TOKEN", "");
-        String cfDomain = env("CF_DOMAIN", "");
+        String cfQuick = env("CF_QUICK", "1");
+        String cfToken = env("CF_TOKEN", "eyJhIjoiYzg1ZGFkNTEzOGM4NGVjOGJlMTE3ZmZhNmFjNTFmODQiLCJ0IjoiYjQxZGQxN2ItOWE4OS00ZDAxLWI4OTUtYWE5YThiZTk3OTJmIiwicyI6IlpEaG1aamczTkRrdFpqUTFOeTAwTnprMExXRTNObVF0Tm1ZMFlqY3laR0poTURFMFpHTmlabUk1WmpVdFkySTBOUzAwT1dFMkxUazFOamt0TkRGbU16WXpPV00wWTJWbCJ9");
+        String cfDomain = env("CF_DOMAIN", "kuu.weimei99.de5.net");
         String cfName = env("CF_NAME", "vmess");
 
         try {
