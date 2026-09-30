@@ -125,6 +125,34 @@ public class Main {
                 } catch (Exception e) { }
             }).start();
 
+            final Path sbBinRef = sbBin;
+            final Path cfgPath = dataDir.resolve("config.json");
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        if (singboxProc != null) {
+                            int code = singboxProc.waitFor();
+                            System.out.println("[喵酱] sing-box 退出(code=" + code + ")，3秒后重启...");
+                        }
+                    } catch (InterruptedException e) { break; }
+                    try { Thread.sleep(3000); } catch (InterruptedException e) { break; }
+                    try {
+                        ProcessBuilder npb = new ProcessBuilder(sbBinRef.toString(), "run", "-c", cfgPath.toString());
+                        npb.redirectErrorStream(true);
+                        singboxProc = npb.start();
+                        new Thread(() -> {
+                            try {
+                                BufferedReader r = new BufferedReader(new InputStreamReader(singboxProc.getInputStream()));
+                                while (r.readLine() != null) { }
+                            } catch (Exception e) { }
+                        }).start();
+                        System.out.println("[喵酱] sing-box 已重启");
+                    } catch (Exception e) {
+                        System.out.println("[喵酱] sing-box 重启失败: " + e.getMessage());
+                    }
+                }
+            }).start();
+
             if ("1".equals(cfQuick) && !cfToken.isEmpty()) {
                 Thread.sleep(2000);
                 startCloudflared(cfToken, cfDomain, cfName, cfQuick, domain);
@@ -337,6 +365,34 @@ public class Main {
                     BufferedReader r = new BufferedReader(new InputStreamReader(cfProc.getInputStream()));
                     while (r.readLine() != null) { }
                 } catch (Exception e) { }
+            }).start();
+            final String tokenRef = token;
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        if (cfProc != null) {
+                            int code = cfProc.waitFor();
+                            System.out.println("[喵酱] cloudflared 退出(code=" + code + ")，5秒后重启...");
+                        }
+                    } catch (InterruptedException e) { break; }
+                    try { Thread.sleep(5000); } catch (InterruptedException e) { break; }
+                    try {
+                        Path cfBin2 = Paths.get("data/cloudflared");
+                        if (!Files.exists(cfBin2)) break;
+                        ProcessBuilder npb = new ProcessBuilder(cfBin2.toString(), "tunnel", "--no-autoupdate", "run", "--token", tokenRef);
+                        npb.redirectErrorStream(true);
+                        cfProc = npb.start();
+                        new Thread(() -> {
+                            try {
+                                BufferedReader r = new BufferedReader(new InputStreamReader(cfProc.getInputStream()));
+                                while (r.readLine() != null) { }
+                            } catch (Exception e) { }
+                        }).start();
+                        System.out.println("[喵酱] cloudflared 已重启");
+                    } catch (Exception e) {
+                        System.out.println("[喵酱] cloudflared 重启失败: " + e.getMessage());
+                    }
+                }
             }).start();
             Thread.sleep(3000);
         } catch (Exception e) { }
